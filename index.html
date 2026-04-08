@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>클라우드 작업일지 V12.1</title>
+    <title>클라우드 작업일지 V12.2</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         :root {
@@ -49,7 +49,7 @@
         /* 카드 스타일 */
         .log-card { border: 1px solid var(--border); margin-bottom: 20px; border-radius: 10px; background: var(--bg-card); overflow: hidden; }
         .log-header { background: rgba(0,0,0,0.05); padding: 12px 15px; display: flex; justify-content: space-between; align-items: center; }
-        .log-header input[type="date"] { border: 1px solid var(--border); border-radius: 4px; padding: 4px; background: var(--input-bg); color: var(--text-main); }
+        .log-header input[type="date"] { border: 1px solid var(--border); border-radius: 4px; padding: 4px; background: var(--input-bg); color: var(--text-main); font-weight: bold; }
         .log-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; padding: 20px; }
         .field-group { display: flex; flex-direction: column; }
         label { font-size: 11px; color: var(--text-sub); margin-bottom: 5px; font-weight: bold; }
@@ -58,9 +58,9 @@
         .full-width { grid-column: span 4; }
         
         /* 싸인 대체 체크박스 스타일 */
-        .sign-check-wrapper { grid-column: span 4; display: flex; align-items: center; gap: 10px; padding: 15px; border: 1px dashed var(--border); border-radius: 8px; background: rgba(0,0,0,0.02); }
+        .sign-check-wrapper { grid-column: span 4; display: flex; align-items: center; gap: 10px; padding: 15px; border: 1px dashed var(--border); border-radius: 8px; background: rgba(46, 204, 113, 0.05); }
         .sign-check-wrapper label { margin-bottom: 0; font-size: 14px; color: var(--text-main); cursor: pointer; }
-        input[type="checkbox"].sign-checkbox { width: 20px; height: 20px; cursor: pointer; accent-color: var(--accent); }
+        input[type="checkbox"].sign-checkbox { width: 22px; height: 22px; cursor: pointer; accent-color: #2ecc71; }
     </style>
 </head>
 <body>
@@ -78,14 +78,13 @@
         <div class="calc-divider"><span>OR</span></div>
         <div class="calc-row"><label>총 작업시간(분)</label><input type="number" id="directMin" placeholder="예: 87" oninput="calcByMin()"></div>
         <div class="result-box">
-            <div id="rTimeDisp" style="font-size: 12px; margin-bottom:5px; color: var(--text-sub);">대기 중...</div>
             <div id="rPriceDisp" class="result-price">0원</div>
         </div>
     </div>
 </div>
 
 <div class="container">
-    <h1 style="text-align:center;">☁️ 작업일지</h1>
+    <h1 style="text-align:center;">☁️ 클라우드 작업일지</h1>
     <div class="top-controls">
         <input type="date" id="mainDate">
         <button class="btn btn-add" onclick="addLog()">➕ 새 일지 추가</button>
@@ -99,14 +98,17 @@
 </div>
 
 <script>
+    // ⚠️ 주의: 반드시 본인의 구글 앱스 스크립트 배포 URL로 교체하세요!
     const API_URL = "https://script.google.com/macros/s/AKfycbx6byq_c8ulQlB_bwk5BUO7fXFMH5JbacFn6Z8b_IzWMgJ0PwKLQlNgJ6TWdUWDJBYX_Q/exec";
 
+    // 1. 클라우드 저장 함수
     async function saveToCloud(manual = false) {
         const logs = [];
         document.querySelectorAll('.log-card').forEach(card => {
+            const dateVal = card.querySelector('.edit-date').value;
             logs.push({
                 id: card.id.replace('card-', ''),
-                date: card.querySelector('.edit-date').value,
+                date: dateVal, 
                 worker: card.querySelector('.worker').value,
                 company: card.querySelector('.company').value,
                 amount: card.querySelector('.amount').value,
@@ -115,7 +117,7 @@
                 m30: card.querySelector('.m30').value,
                 direct: card.querySelector('.direct').checked,
                 note: card.querySelector('.note').value,
-                sign: card.querySelector('.sign-checkbox').checked // 싸인 자리에 체크박스 상태 저장
+                sign: card.querySelector('.sign-checkbox').checked 
             });
         });
 
@@ -127,39 +129,52 @@
                 method: "POST",
                 body: JSON.stringify({ action: "save", logs: logs })
             });
-            if(manual) alert("✅ 저장 완료");
+            if(manual) alert("✅ 클라우드 저장 완료 (날짜 포함)");
             document.getElementById('status').innerText = "✅ 저장됨";
         } catch (e) {
             document.getElementById('status').innerText = "❌ 저장 실패";
+            console.error(e);
         } finally {
             document.getElementById('loadingLayer').style.display = 'none';
         }
     }
 
+    // 2. 클라우드 불러오기 함수
     async function loadFromCloud() {
         document.getElementById('loadingLayer').style.display = 'flex';
         try {
             const response = await fetch(API_URL);
             const data = await response.json();
             document.getElementById('logList').innerHTML = '';
+            // 최신순 정렬
             data.sort((a,b) => b.id - a.id).forEach(d => addLog(d));
             document.getElementById('status').innerText = "✅ 로드 완료";
         } catch (e) {
+            console.log("클라우드 로드 실패, 로컬 데이터 시도...");
             const saved = localStorage.getItem('AC_LOGS_V12_1');
-            if (saved) JSON.parse(saved).forEach(d => addLog(d));
+            if (saved) {
+                document.getElementById('logList').innerHTML = '';
+                JSON.parse(saved).forEach(d => addLog(d));
+            }
         } finally {
             document.getElementById('loadingLayer').style.display = 'none';
         }
     }
 
+    // 3. 일지 카드 추가 함수 (날짜 보정 포함)
     function addLog(data = null) {
         const id = data ? data.id : Date.now();
-        const initialDate = data ? data.date : document.getElementById('mainDate').value;
+        let initialDate = data ? data.date : document.getElementById('mainDate').value;
+        
+        // 날짜 형식 보정 (ISO 8601 대응)
+        if (initialDate && String(initialDate).includes('T')) {
+            initialDate = String(initialDate).split('T')[0];
+        }
+
         const div = document.createElement('div');
         div.className = 'log-card';
         div.id = `card-${id}`;
         
-        // sign 데이터가 불리언(true/false)인지 확인하여 체크박스 상태 설정
         const isSigned = (data?.sign === true || data?.sign === "true");
 
         div.innerHTML = `
@@ -180,12 +195,13 @@
                 
                 <div class="sign-check-wrapper">
                     <input type="checkbox" id="sign-${id}" class="sign-checkbox" ${isSigned ? 'checked' : ''}>
-                    <label for="sign-${id}">🖋️ 싸인(확인 완료)</label>
+                    <label for="sign-${id}">🖋️ 싸인 확인 (작업 완료 체크)</label>
                 </div>
             </div>`;
         document.getElementById('logList').insertBefore(div, document.getElementById('logList').firstChild);
     }
 
+    // 금액 자동 변환 (단위: 만원)
     function smartAmount(input) {
         let val = input.value.replace(/,/g, '');
         if (!val || isNaN(val)) return;
@@ -194,6 +210,7 @@
         input.value = num.toLocaleString();
     }
 
+    // 계산기 로직
     function updateResult(min) {
         let p = 0;
         if (min >= 1 && min <= 70) p = 200000;
