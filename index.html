@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>클라우드 작업일지 V12.3</title>
+    <title>클라우드 작업일지 V12.5</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         :root {
@@ -57,7 +57,6 @@
         .amount-input { font-weight: bold; color: #e67e22; border: 1px solid #e67e22; }
         .full-width { grid-column: span 4; }
         
-        /* 싸인 대체 체크박스 스타일 */
         .sign-check-wrapper { grid-column: span 4; display: flex; align-items: center; gap: 10px; padding: 15px; border: 1px dashed var(--border); border-radius: 8px; background: rgba(46, 204, 113, 0.05); }
         .sign-check-wrapper label { margin-bottom: 0; font-size: 14px; color: var(--text-main); cursor: pointer; }
         input[type="checkbox"].sign-checkbox { width: 22px; height: 22px; cursor: pointer; accent-color: #2ecc71; }
@@ -67,6 +66,7 @@
 
 <div id="loadingLayer">☁️ 클라우드 동기화 중...</div>
 
+<!-- 계산기 영역 -->
 <div id="floatingCalc">
     <div class="calc-header" id="calcHeader">
         <span>🧮 단가 계산기</span>
@@ -98,8 +98,8 @@
 </div>
 
 <script>
-    // ⚠️ 반드시 본인의 구글 앱스 스크립트 배포 URL로 교체하세요!
-    const API_URL = "https://script.google.com/macros/s/AKfycbx6byq_c8ulQlB_bwk5BUO7fXFMH5JbacFn6Z8b_IzWMgJ0PwKLQlNgJ6TWdUWDJBYX_Q/exec";
+    // ⚠️ 구글 앱스 스크립트 배포 URL (본인 주소로 유지하세요)
+    const API_URL = "https://script.google.com/macros/s/AKfycbxK3b4SkRAc0aqYPyOO-20TXv1IQXEPvC3RvJML2_nGIQH1pnBGPA1pF76IvMdslimeaw/exec";
 
     // 1. 클라우드 저장
     async function saveToCloud(manual = false) {
@@ -137,24 +137,33 @@
         }
     }
 
-    // 2. 클라우드 불러오기
+    // 2. 클라우드 불러오기 (중복 방지 로직 포함)
     async function loadFromCloud() {
         document.getElementById('loadingLayer').style.display = 'flex';
         try {
             const response = await fetch(API_URL);
             const data = await response.json();
+            
+            // 화면 비우기 (중복 추가 방지)
             document.getElementById('logList').innerHTML = '';
-            data.sort((a,b) => b.id - a.id).forEach(d => addLog(d));
+            
+            // 데이터를 ID 순서대로 정렬하여 화면에 추가
+            data.sort((a,b) => a.id - b.id).forEach(d => addLog(d));
+            
             document.getElementById('status').innerText = "✅ 로드 완료";
         } catch (e) {
+            // 실패 시 로컬 스토리지에서 불러오기
             const saved = localStorage.getItem('AC_LOGS_V12_1');
-            if (saved) JSON.parse(saved).forEach(d => addLog(d));
+            if (saved) {
+                document.getElementById('logList').innerHTML = '';
+                JSON.parse(saved).forEach(d => addLog(d));
+            }
         } finally {
             document.getElementById('loadingLayer').style.display = 'none';
         }
     }
 
-    // 3. 일지 카드 추가 (날짜 보정 포함)
+    // 3. 일지 카드 추가
     function addLog(data = null) {
         const id = data ? data.id : Date.now();
         let initialDate = data ? data.date : document.getElementById('mainDate').value;
@@ -187,10 +196,11 @@
                     <label for="sign-${id}">🖋️ 싸인 확인 (작업 완료)</label>
                 </div>
             </div>`;
+        // 최신글이 항상 위로 오도록 insertBefore 사용
         document.getElementById('logList').insertBefore(div, document.getElementById('logList').firstChild);
     }
 
-    // 금액 자동 변환
+    // 금액 스마트 콤마
     function smartAmount(input) {
         let val = input.value.replace(/,/g, '');
         if (!val || isNaN(val)) return;
@@ -199,13 +209,12 @@
         input.value = num.toLocaleString();
     }
 
-    // 계산기 열기/닫기 및 초기화
+    // 계산기 토글 및 자동 초기화
     function toggleCalc() {
         const el = document.getElementById('floatingCalc');
         const isVisible = (el.style.display === 'block');
 
         if (isVisible) {
-            // 닫힐 때 입력값 초기화
             document.getElementById('sTime').value = '';
             document.getElementById('eTime').value = '';
             document.getElementById('directMin').value = '';
@@ -216,17 +225,18 @@
         }
     }
 
-    // 계산기 외부 클릭 시 자동 닫기
+    // 외부 클릭 시 계산기 닫기
     window.onclick = function(event) {
         const calc = document.getElementById('floatingCalc');
         const btnCalc = document.querySelector('.btn-calc');
-        if (calc.style.display === 'block') {
+        if (calc && calc.style.display === 'block') {
             if (!calc.contains(event.target) && event.target !== btnCalc) {
                 toggleCalc();
             }
         }
     };
 
+    // 계산 로직
     function updateResult(min) {
         let p = 0;
         if (min >= 1 && min <= 70) p = 200000;
