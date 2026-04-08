@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>클라우드 작업일지 V12.2</title>
+    <title>클라우드 작업일지 V12.3</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         :root {
@@ -98,17 +98,16 @@
 </div>
 
 <script>
-    // ⚠️ 주의: 반드시 본인의 구글 앱스 스크립트 배포 URL로 교체하세요!
+    // ⚠️ 반드시 본인의 구글 앱스 스크립트 배포 URL로 교체하세요!
     const API_URL = "https://script.google.com/macros/s/AKfycbx6byq_c8ulQlB_bwk5BUO7fXFMH5JbacFn6Z8b_IzWMgJ0PwKLQlNgJ6TWdUWDJBYX_Q/exec";
 
-    // 1. 클라우드 저장 함수
+    // 1. 클라우드 저장
     async function saveToCloud(manual = false) {
         const logs = [];
         document.querySelectorAll('.log-card').forEach(card => {
-            const dateVal = card.querySelector('.edit-date').value;
             logs.push({
                 id: card.id.replace('card-', ''),
-                date: dateVal, 
+                date: card.querySelector('.edit-date').value, 
                 worker: card.querySelector('.worker').value,
                 company: card.querySelector('.company').value,
                 amount: card.querySelector('.amount').value,
@@ -129,44 +128,37 @@
                 method: "POST",
                 body: JSON.stringify({ action: "save", logs: logs })
             });
-            if(manual) alert("✅ 클라우드 저장 완료 (날짜 포함)");
+            if(manual) alert("✅ 저장되었습니다.");
             document.getElementById('status').innerText = "✅ 저장됨";
         } catch (e) {
             document.getElementById('status').innerText = "❌ 저장 실패";
-            console.error(e);
         } finally {
             document.getElementById('loadingLayer').style.display = 'none';
         }
     }
 
-    // 2. 클라우드 불러오기 함수
+    // 2. 클라우드 불러오기
     async function loadFromCloud() {
         document.getElementById('loadingLayer').style.display = 'flex';
         try {
             const response = await fetch(API_URL);
             const data = await response.json();
             document.getElementById('logList').innerHTML = '';
-            // 최신순 정렬
             data.sort((a,b) => b.id - a.id).forEach(d => addLog(d));
             document.getElementById('status').innerText = "✅ 로드 완료";
         } catch (e) {
-            console.log("클라우드 로드 실패, 로컬 데이터 시도...");
             const saved = localStorage.getItem('AC_LOGS_V12_1');
-            if (saved) {
-                document.getElementById('logList').innerHTML = '';
-                JSON.parse(saved).forEach(d => addLog(d));
-            }
+            if (saved) JSON.parse(saved).forEach(d => addLog(d));
         } finally {
             document.getElementById('loadingLayer').style.display = 'none';
         }
     }
 
-    // 3. 일지 카드 추가 함수 (날짜 보정 포함)
+    // 3. 일지 카드 추가 (날짜 보정 포함)
     function addLog(data = null) {
         const id = data ? data.id : Date.now();
         let initialDate = data ? data.date : document.getElementById('mainDate').value;
         
-        // 날짜 형식 보정 (ISO 8601 대응)
         if (initialDate && String(initialDate).includes('T')) {
             initialDate = String(initialDate).split('T')[0];
         }
@@ -174,7 +166,6 @@
         const div = document.createElement('div');
         div.className = 'log-card';
         div.id = `card-${id}`;
-        
         const isSigned = (data?.sign === true || data?.sign === "true");
 
         div.innerHTML = `
@@ -190,18 +181,16 @@
                 <div class="field-group"><label>유형</label><input type="text" class="type" value="${data?.type || ''}"></div>
                 <div class="field-group"><label>30M</label><input type="text" class="m30" value="${data?.m30 || ''}"></div>
                 <div class="field-group"><label>직수</label><input type="checkbox" class="direct" ${data?.direct ? 'checked' : ''}></div>
-                
                 <div class="field-group full-width"><label>비고</label><textarea class="note" rows="2">${data?.note || ''}</textarea></div>
-                
                 <div class="sign-check-wrapper">
                     <input type="checkbox" id="sign-${id}" class="sign-checkbox" ${isSigned ? 'checked' : ''}>
-                    <label for="sign-${id}">🖋️ 싸인 확인 (작업 완료 체크)</label>
+                    <label for="sign-${id}">🖋️ 싸인 확인 (작업 완료)</label>
                 </div>
             </div>`;
         document.getElementById('logList').insertBefore(div, document.getElementById('logList').firstChild);
     }
 
-    // 금액 자동 변환 (단위: 만원)
+    // 금액 자동 변환
     function smartAmount(input) {
         let val = input.value.replace(/,/g, '');
         if (!val || isNaN(val)) return;
@@ -210,7 +199,34 @@
         input.value = num.toLocaleString();
     }
 
-    // 계산기 로직
+    // 계산기 열기/닫기 및 초기화
+    function toggleCalc() {
+        const el = document.getElementById('floatingCalc');
+        const isVisible = (el.style.display === 'block');
+
+        if (isVisible) {
+            // 닫힐 때 입력값 초기화
+            document.getElementById('sTime').value = '';
+            document.getElementById('eTime').value = '';
+            document.getElementById('directMin').value = '';
+            document.getElementById('rPriceDisp').innerText = '0원';
+            el.style.display = 'none';
+        } else {
+            el.style.display = 'block';
+        }
+    }
+
+    // 계산기 외부 클릭 시 자동 닫기
+    window.onclick = function(event) {
+        const calc = document.getElementById('floatingCalc');
+        const btnCalc = document.querySelector('.btn-calc');
+        if (calc.style.display === 'block') {
+            if (!calc.contains(event.target) && event.target !== btnCalc) {
+                toggleCalc();
+            }
+        }
+    };
+
     function updateResult(min) {
         let p = 0;
         if (min >= 1 && min <= 70) p = 200000;
@@ -239,11 +255,6 @@
     }
 
     function delLog(id) { if(confirm('삭제하시겠습니까?')) document.getElementById(`card-${id}`).remove(); }
-
-    function toggleCalc() {
-        const el = document.getElementById('floatingCalc');
-        el.style.display = (el.style.display === 'none' || el.style.display === '') ? 'block' : 'none';
-    }
 
     function dragCalc(el) {
         let p1 = 0, p2 = 0, p3 = 0, p4 = 0;
