@@ -123,7 +123,7 @@
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td>${fixDate(d.date)}</td>
-                    <td>${isMyBiz ? '<span class="my-biz-badge">10%대상</span>' : '-'}</td>
+                    <td>${isMyBiz ? '<span class="my-biz-badge">10% 인센티브 계산 됨</span>' : '-'}</td>
                     <td>${d.company || '-'}</td>
                     <td class="amt-text">${amt.toLocaleString()}원</td>
                     <td>${d.worker || '-'}</td>
