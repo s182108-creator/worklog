@@ -2,168 +2,151 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>클라우드 작업일지 V14.5</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>작업일지 뷰어 (비고 확장형)</title>
     <style>
-        :root { --bg-body: #f1f2f6; --bg-card: #ffffff; --text-main: #2c3e50; --accent: #3498db; --border: #dcdde1; }
-        @media (prefers-color-scheme: dark) { :root { --bg-body: #181a1b; --bg-card: #242729; --text-main: #e8e6e3; --border: #3e4446; } }
-        
+        :root { --bg-body: #f8f9fa; --bg-card: #ffffff; --text-main: #2c3e50; --border: #dee2e6; --accent: #e74c3c; }
+        @media (prefers-color-scheme: dark) { :root { --bg-body: #121212; --bg-card: #1e1e1e; --text-main: #e0e0e0; --border: #333333; } }
         body { font-family: sans-serif; background: var(--bg-body); color: var(--text-main); margin: 0; padding: 15px; }
-        .container { max-width: 900px; margin: 0 auto; background: var(--bg-card); padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .container { max-width: 1100px; margin: 0 auto; }
         
-        /* 요약 바: 모바일 고정 기능 */
-        .summary-bar { display: flex; gap: 10px; margin-bottom: 15px; padding: 15px; background: #2980b9; color: white; border-radius: 10px; position: sticky; top: 10px; z-index: 100; }
-        .summary-item { flex: 1; text-align: center; }
-        .summary-label { font-size: 11px; opacity: 0.8; }
-        .summary-value { font-size: 1.1em; font-weight: bold; margin-top: 3px; }
+        .viewer-summary {
+            background: #34495e; color: white; padding: 15px; border-radius: 12px;
+            display: flex; justify-content: space-around; margin-bottom: 20px;
+            position: sticky; top: 10px; z-index: 100; box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        }
+        .sum-item { text-align: center; flex: 1; }
+        .sum-label { font-size: 11px; opacity: 0.8; }
+        .sum-value { font-size: 1.2em; font-weight: bold; margin-top: 4px; }
 
-        .top-controls { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
-        .btn { padding: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; color: white; flex-grow: 1; font-size: 14px; }
-        .btn-add { background: #3498db; }
-        .btn-load { background: #34495e; }
-        .btn-save { background: #2ecc71; }
-        .btn-excel { background: #f39c12; }
+        .table-wrapper { background: var(--bg-card); border-radius: 12px; overflow-x: auto; border: 1px solid var(--border); }
+        table { width: 100%; border-collapse: collapse; min-width: 900px; }
+        th { background: rgba(0,0,0,0.05); padding: 12px; font-size: 13px; border-bottom: 2px solid var(--border); text-align: left; }
+        td { padding: 12px; font-size: 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
         
-        #loadingLayer { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.3); z-index:9999; justify-content:center; align-items:center; color:white; }
-
-        /* 카드 디자인 */
-        .log-card { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 15px; overflow: hidden; background: var(--bg-card); }
-        .log-header { padding: 10px; background: rgba(0,0,0,0.05); display: flex; justify-content: space-between; }
-        .log-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 15px; }
-        .field-group { display: flex; flex-direction: column; }
-        .field-group label { font-size: 11px; color: #7f8c8d; margin-bottom: 4px; }
-        input, textarea { padding: 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-card); color: var(--text-main); font-size: 15px; }
-        .full-width { grid-column: span 2; }
-        .amount-input { border-color: #e67e22; color: #e67e22; font-weight: bold; }
+        .amt-text { color: #e67e22; font-weight: bold; }
+        .my-biz-badge { background: var(--accent); color: white; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; }
+        
+        /* 🚀 비고 스타일 수정 */
+        .note-text { 
+            font-size: 12px; 
+            color: #7f8c8d; 
+            max-width: 200px; 
+            cursor: pointer;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+        /* 줄임표 모드 */
+        .note-truncate {
+            white-space: nowrap; 
+            overflow: hidden; 
+            text-overflow: ellipsis;
+        }
+        /* 전체 보기 모드 (클릭 시 적용) */
+        .note-full {
+            white-space: normal;
+            overflow: visible;
+            color: var(--text-main);
+            background: rgba(231, 76, 60, 0.05); /* 클릭한 줄 강조 */
+            border-radius: 4px;
+        }
+        
+        #loader { text-align: center; padding: 50px; font-weight: bold; }
     </style>
 </head>
 <body>
 
-<div id="loadingLayer">☁️ 처리 중...</div>
-
 <div class="container">
-    <div class="summary-bar">
-        <div class="summary-item">
-            <div class="summary-label">총 작업 금액</div>
-            <div id="totalAmountDisp" class="summary-value">0원</div>
-        </div>
-        <div class="summary-item">
-            <div class="summary-label">수익 (40%)</div>
-            <div id="myShareDisp" class="summary-value" style="color: #f1c40f;">0원</div>
+    <div class="viewer-summary">
+        <div class="sum-item"><div class="sum-label">총 작업 매출</div><div id="vTotal" class="sum-value">0원</div></div>
+        <div class="sum-item" style="border-left: 1px solid rgba(255,255,255,0.2);">
+            <div class="sum-label">월급 자동계산</div>
+            <div id="vShare" class="sum-value" style="color: #f1c40f;">0원</div>
         </div>
     </div>
 
-    <div class="top-controls">
-        <input type="date" id="mainDate" style="flex-grow: 2;">
-        <button class="btn btn-add" onclick="addLog()">➕ 추가</button>
-        <button class="btn btn-load" onclick="loadFromCloud()">🔄 불러오기</button>
-        <button class="btn btn-save" onclick="saveToCloud(true)">💾 저장</button>
-        <button class="btn btn-excel" onclick="exportEx()">📊 엑셀</button>
+    <div class="table-wrapper">
+        <table id="logTable">
+            <thead>
+                <tr>
+                    <th>날짜</th>
+                    <th>개인 오더</th>
+                    <th>업체명</th>
+                    <th>금액</th>
+                    <th>작업자</th>
+                    <th>장소</th>
+                    <th>유형</th>
+                    <th>비고 (클릭 시 전체보기)</th>
+                </tr>
+            </thead>
+            <tbody id="viewerList"></tbody>
+        </table>
+        <div id="loader">데이터를 불러오는 중...</div>
     </div>
-
-    <div id="logList"></div>
 </div>
 
 <script>
-    // ⚠️ 여기에 복사한 구글 배포 URL을 넣으세요!
     const API_URL = "https://script.google.com/macros/s/AKfycbwykn8FjDC-Gewv-0UlDRP5rV3eoTjEJBEFcH7n6aYNIWiA-8L--UetOJirizeq5iVM/exec";
 
-    function updateTotal() {
-        let total = 0;
-        document.querySelectorAll('.amount-input').forEach(el => {
-            total += parseInt(el.value.replace(/,/g, '')) || 0;
-        });
-        document.getElementById('totalAmountDisp').innerText = total.toLocaleString() + "원";
-        document.getElementById('myShareDisp').innerText = Math.floor(total * 0.4).toLocaleString() + "원";
+    function fixDate(d) {
+        if (!d) return "";
+        let date = new Date(d);
+        if (isNaN(date.getTime())) return String(d).split('T')[0];
+        return `${date.getFullYear()}-${("0"+(date.getMonth()+1)).slice(-2)}-${("0"+date.getDate()).slice(-2)}`;
     }
 
-    async function saveToCloud(manual) {
-        const logs = Array.from(document.querySelectorAll('.log-card')).map(card => ({
-            id: card.id.replace('card-',''),
-            date: card.querySelector('.edit-date').value,
-            worker: card.querySelector('.worker').value,
-            company: card.querySelector('.company').value,
-            amount: card.querySelector('.amount').value,
-            location: card.querySelector('.location').value,
-            type: card.querySelector('.type').value,
-            m30: card.querySelector('.m30').value,
-            direct: card.querySelector('.direct').checked,
-            note: card.querySelector('.note').value,
-            sign: card.querySelector('.sign-checkbox').checked
-        }));
-
-        document.getElementById('loadingLayer').style.display = 'flex';
-        try {
-            await fetch(API_URL, { method: "POST", mode: "no-cors", body: JSON.stringify({ action: "save", logs: logs }) });
-            if(manual) alert("✅ 클라우드 동기화 완료");
-        } catch(e) { alert("❌ 오류 발생"); }
-        document.getElementById('loadingLayer').style.display = 'none';
+    // 🚀 비고 클릭 이벤트 함수
+    function toggleNote(el) {
+        el.classList.toggle('note-truncate');
+        el.classList.toggle('note-full');
     }
 
-    async function loadFromCloud() {
-        document.getElementById('loadingLayer').style.display = 'flex';
+    async function loadForViewer() {
         try {
             const resp = await fetch(`${API_URL}?t=${Date.now()}`);
             const data = await resp.json();
-            document.getElementById('logList').innerHTML = '';
-            data.sort((a,b) => new Date(a.date) - new Date(b.date)).forEach(d => addLog(d, true));
-            updateTotal();
-        } catch(e) { alert("❌ 불러오기 실패. 설정(Anyone)을 확인하세요."); }
-        document.getElementById('loadingLayer').style.display = 'none';
+            const list = document.getElementById('viewerList');
+            document.getElementById('loader').style.display = 'none';
+            list.innerHTML = '';
+
+            let totalSales = 0;
+            let totalMyPay = 0;
+
+            data.sort((a,b) => new Date(fixDate(a.date)) - new Date(fixDate(b.date))).forEach(d => {
+                const amt = parseInt(String(d.amount).replace(/,/g, '')) || 0;
+                const isMyBiz = d.myBiz === true || d.myBiz === "true";
+                
+                totalSales += amt;
+                if (isMyBiz) { totalMyPay += (amt * 0.1) + (amt * 0.4); } 
+                else { totalMyPay += (amt * 0.4); }
+
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${fixDate(d.date)}</td>
+                    <td>${isMyBiz ? '<span class="my-biz-badge">10%대상</span>' : '-'}</td>
+                    <td>${d.company || '-'}</td>
+                    <td class="amt-text">${amt.toLocaleString()}원</td>
+                    <td>${d.worker || '-'}</td>
+                    <td>${d.location || '-'}</td>
+                    <td>${d.type || '-'}</td>
+                    <td class="note-text note-truncate" 
+                        title="${d.note || ''}" 
+                        onclick="toggleNote(this)">
+                        ${d.note || '-'}
+                    </td>
+                `;
+                list.appendChild(row);
+            });
+
+            document.getElementById('vTotal').innerText = totalSales.toLocaleString() + "원";
+            document.getElementById('vShare').innerText = Math.floor(totalMyPay).toLocaleString() + "원";
+
+        } catch(e) {
+            document.getElementById('loader').innerText = "❌ 데이터를 가져오는데 실패했습니다.";
+        }
     }
 
-    function addLog(data = null, isLoad = false) {
-        const id = data ? data.id : Date.now();
-        const div = document.createElement('div');
-        div.className = 'log-card';
-        div.id = `card-${id}`;
-        div.innerHTML = `
-            <div class="log-header">
-                <input type="date" class="edit-date" value="${data?.date || document.getElementById('mainDate').value}">
-                <button onclick="document.getElementById('card-${id}').remove(); updateTotal();" style="border:none; background:none; color:red;">삭제</button>
-            </div>
-            <div class="log-grid">
-                <div class="field-group"><label>작업자</label><input type="text" class="worker" value="${data?.worker || ''}"></div>
-                <div class="field-group"><label>업체명</label><input type="text" class="company" value="${data?.company || ''}"></div>
-                <div class="field-group"><label>금액</label><input type="text" class="amount amount-input" value="${data?.amount || ''}" oninput="updateTotal()" onblur="smartAmount(this)"></div>
-                <div class="field-group"><label>장소</label><input type="text" class="location" value="${data?.location || ''}"></div>
-                <div class="field-group"><label>유형</label><input type="text" class="type" value="${data?.type || ''}"></div>
-                <div class="field-group"><label>30M</label><input type="text" class="m30" value="${data?.m30 || ''}"></div>
-                <div class="field-group"><label>직수</label><input type="checkbox" class="direct" ${data?.direct ? 'checked' : ''}></div>
-                <div class="field-group"><label>싸인</label><input type="checkbox" class="sign-checkbox" ${data?.sign ? 'checked' : ''}></div>
-                <div class="field-group full-width"><label>비고</label><textarea class="note">${data?.note || ''}</textarea></div>
-            </div>`;
-        const list = document.getElementById('logList');
-        isLoad ? list.appendChild(div) : list.insertBefore(div, list.firstChild);
-        updateTotal();
-    }
-
-    function smartAmount(input) {
-        let val = input.value.replace(/,/g, '');
-        if (!val || isNaN(val)) return;
-        let num = parseFloat(val);
-        if (num > 0 && num < 1000) num *= 10000;
-        input.value = num.toLocaleString();
-        updateTotal();
-    }
-
-    function exportEx() {
-        const rows = Array.from(document.querySelectorAll('.log-card')).map(card => ({
-            "날짜": card.querySelector('.edit-date').value,
-            "금액": card.querySelector('.amount').value,
-            "비고": card.querySelector('.note').value
-        }));
-        const ws = XLSX.utils.json_to_sheet(rows);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "일지");
-        XLSX.writeFile(wb, `작업일지.xlsx`);
-    }
-
-    document.addEventListener('DOMContentLoaded', () => {
-        document.getElementById('mainDate').value = new Date().toISOString().split('T')[0];
-        loadFromCloud();
-    });
+    document.addEventListener('DOMContentLoaded', loadForViewer);
 </script>
 </body>
 </html>
