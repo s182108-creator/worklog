@@ -12,12 +12,20 @@
         
         .viewer-summary {
             background: #34495e; color: white; padding: 15px; border-radius: 12px;
-            display: flex; justify-content: space-around; margin-bottom: 20px;
+            display: flex; justify-content: space-around; margin-bottom: 10px;
             position: sticky; top: 10px; z-index: 100; box-shadow: 0 4px 10px rgba(0,0,0,0.2);
         }
         .sum-item { text-align: center; flex: 1; }
         .sum-label { font-size: 11px; opacity: 0.8; }
         .sum-value { font-size: 1.2em; font-weight: bold; margin-top: 4px; }
+
+        /* 월별 필터 스타일 */
+        .filter-bar {
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+            background: var(--bg-card); padding: 12px; border-radius: 10px;
+            margin-bottom: 15px; border: 1px solid var(--border);
+        }
+        .filter-bar select { padding: 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-main); font-size: 14px; }
 
         .table-wrapper { background: var(--bg-card); border-radius: 12px; overflow-x: auto; border: 1px solid var(--border); }
         table { width: 100%; border-collapse: collapse; min-width: 900px; }
@@ -27,29 +35,11 @@
         .amt-text { color: #e67e22; font-weight: bold; }
         .my-biz-badge { background: var(--accent); color: white; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; }
         
-        /* 🚀 비고 스타일 수정 */
         .note-text { 
-            font-size: 12px; 
-            color: #7f8c8d; 
-            max-width: 200px; 
-            cursor: pointer;
-            transition: all 0.2s ease;
-            position: relative;
+            font-size: 12px; color: #7f8c8d; max-width: 200px; cursor: pointer; transition: all 0.2s ease; position: relative;
         }
-        /* 줄임표 모드 */
-        .note-truncate {
-            white-space: nowrap; 
-            overflow: hidden; 
-            text-overflow: ellipsis;
-        }
-        /* 전체 보기 모드 (클릭 시 적용) */
-        .note-full {
-            white-space: normal;
-            overflow: visible;
-            color: var(--text-main);
-            background: rgba(231, 76, 60, 0.05); /* 클릭한 줄 강조 */
-            border-radius: 4px;
-        }
+        .note-truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .note-full { white-space: normal; overflow: visible; color: var(--text-main); background: rgba(231, 76, 60, 0.05); border-radius: 4px; }
         
         #loader { text-align: center; padding: 50px; font-weight: bold; }
     </style>
@@ -63,6 +53,20 @@
             <div class="sum-label">월급 자동계산</div>
             <div id="vShare" class="sum-value" style="color: #f1c40f;">0원</div>
         </div>
+    </div>
+
+    <!-- 필터 영역 -->
+    <div class="filter-bar">
+        <span>📅 조회 기간:</span>
+        <select id="filterYear" onchange="applyFilter()"></select>
+        <select id="filterMonth" onchange="applyFilter()">
+            <option value="all">전체보기</option>
+            <option value="01">1월</option><option value="02">2월</option><option value="03">3월</option>
+            <option value="04">4월</option><option value="05">5월</option><option value="06">6월</option>
+            <option value="07">7월</option><option value="08">8월</option><option value="09">9월</option>
+            <option value="10">10월</option><option value="11">11월</option><option value="12">12월</option>
+        </select>
+        <button onclick="loadForViewer()" style="margin-left:10px; padding:7px 12px; cursor:pointer; border-radius:5px; border:1px solid #ccc;">🔄 새로고침</button>
     </div>
 
     <div class="table-wrapper">
@@ -87,6 +91,21 @@
 
 <script>
     const API_URL = "https://script.google.com/macros/s/AKfycbwykn8FjDC-Gewv-0UlDRP5rV3eoTjEJBEFcH7n6aYNIWiA-8L--UetOJirizeq5iVM/exec";
+    let cachedData = []; // 불러온 전체 데이터를 저장
+
+    function initFilter() {
+        const yearSelect = document.getElementById('filterYear');
+        const currYear = new Date().getFullYear();
+        // 현재 연도 기준 전후 1년씩 선택 가능
+        for(let i = currYear - 1; i <= currYear + 1; i++) {
+            const opt = document.createElement('option');
+            opt.value = i; opt.innerText = i + "년";
+            if(i === currYear) opt.selected = true;
+            yearSelect.appendChild(opt);
+        }
+        // 초기값은 이번 달로 설정
+        document.getElementById('filterMonth').value = ("0" + (new Date().getMonth() + 1)).slice(-2);
+    }
 
     function fixDate(d) {
         if (!d) return "";
@@ -95,58 +114,74 @@
         return `${date.getFullYear()}-${("0"+(date.getMonth()+1)).slice(-2)}-${("0"+date.getDate()).slice(-2)}`;
     }
 
-    // 🚀 비고 클릭 이벤트 함수
     function toggleNote(el) {
         el.classList.toggle('note-truncate');
         el.classList.toggle('note-full');
     }
 
+    function applyFilter() {
+        const targetYear = document.getElementById('filterYear').value;
+        const targetMonth = document.getElementById('filterMonth').value;
+        const list = document.getElementById('viewerList');
+        list.innerHTML = '';
+
+        let totalSales = 0;
+        let totalMyPay = 0;
+
+        const filtered = cachedData.filter(d => {
+            const dStr = fixDate(d.date);
+            if (targetMonth === 'all') return dStr.startsWith(targetYear);
+            return dStr.startsWith(`${targetYear}-${targetMonth}`);
+        });
+
+        filtered.sort((a,b) => new Date(fixDate(a.date)) - new Date(fixDate(b.date))).forEach(d => {
+            const amt = parseInt(String(d.amount).replace(/,/g, '')) || 0;
+            const isMyBiz = d.myBiz === true || d.myBiz === "true";
+            
+            totalSales += amt;
+            totalMyPay += isMyBiz ? (amt * 0.1) + (amt * 0.4) : (amt * 0.4);
+
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${fixDate(d.date)}</td>
+                <td>${isMyBiz ? '<span class="my-biz-badge">10%대상</span>' : '-'}</td>
+                <td>${d.company || '-'}</td>
+                <td class="amt-text">${amt.toLocaleString()}원</td>
+                <td>${d.worker || '-'}</td>
+                <td>${d.location || '-'}</td>
+                <td>${d.type || '-'}</td>
+                <td class="note-text note-truncate" title="${d.note || ''}" onclick="toggleNote(this)">
+                    ${d.note || '-'}
+                </td>
+            `;
+            list.appendChild(row);
+        });
+
+        document.getElementById('vTotal').innerText = totalSales.toLocaleString() + "원";
+        document.getElementById('vShare').innerText = Math.floor(totalMyPay).toLocaleString() + "원";
+        
+        if (filtered.length === 0) {
+            list.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:30px;">해당 기간의 데이터가 없습니다.</td></tr>';
+        }
+    }
+
     async function loadForViewer() {
+        document.getElementById('loader').style.display = 'block';
+        document.getElementById('loader').innerText = "데이터를 불러오는 중...";
         try {
             const resp = await fetch(`${API_URL}?t=${Date.now()}`);
-            const data = await resp.json();
-            const list = document.getElementById('viewerList');
+            cachedData = await resp.json();
             document.getElementById('loader').style.display = 'none';
-            list.innerHTML = '';
-
-            let totalSales = 0;
-            let totalMyPay = 0;
-
-            data.sort((a,b) => new Date(fixDate(a.date)) - new Date(fixDate(b.date))).forEach(d => {
-                const amt = parseInt(String(d.amount).replace(/,/g, '')) || 0;
-                const isMyBiz = d.myBiz === true || d.myBiz === "true";
-                
-                totalSales += amt;
-                if (isMyBiz) { totalMyPay += (amt * 0.1) + (amt * 0.4); } 
-                else { totalMyPay += (amt * 0.4); }
-
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${fixDate(d.date)}</td>
-                    <td>${isMyBiz ? '<span class="my-biz-badge">10% 인센티브 계산 됨</span>' : '-'}</td>
-                    <td>${d.company || '-'}</td>
-                    <td class="amt-text">${amt.toLocaleString()}원</td>
-                    <td>${d.worker || '-'}</td>
-                    <td>${d.location || '-'}</td>
-                    <td>${d.type || '-'}</td>
-                    <td class="note-text note-truncate" 
-                        title="${d.note || ''}" 
-                        onclick="toggleNote(this)">
-                        ${d.note || '-'}
-                    </td>
-                `;
-                list.appendChild(row);
-            });
-
-            document.getElementById('vTotal').innerText = totalSales.toLocaleString() + "원";
-            document.getElementById('vShare').innerText = Math.floor(totalMyPay).toLocaleString() + "원";
-
+            applyFilter();
         } catch(e) {
             document.getElementById('loader').innerText = "❌ 데이터를 가져오는데 실패했습니다.";
         }
     }
 
-    document.addEventListener('DOMContentLoaded', loadForViewer);
+    document.addEventListener('DOMContentLoaded', () => {
+        initFilter();
+        loadForViewer();
+    });
 </script>
 </body>
 </html>
