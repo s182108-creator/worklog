@@ -19,7 +19,6 @@
         .sum-label { font-size: 11px; opacity: 0.8; }
         .sum-value { font-size: 1.2em; font-weight: bold; margin-top: 4px; }
 
-        /* 월별 필터 스타일 */
         .filter-bar {
             display: flex; align-items: center; justify-content: center; gap: 10px;
             background: var(--bg-card); padding: 12px; border-radius: 10px;
@@ -48,14 +47,13 @@
 
 <div class="container">
     <div class="viewer-summary">
-        <div class="sum-item"><div class="sum-label">총 작업 매출</div><div id="vTotal" class="sum-value">0원</div></div>
+        <div class="sum-item"><div class="sum-label">총 작업 매출 (제외항목 미포함)</div><div id="vTotal" class="sum-value">0원</div></div>
         <div class="sum-item" style="border-left: 1px solid rgba(255,255,255,0.2);">
-            <div class="sum-label">월급 자동계산</div>
+            <div class="sum-label">내 수당 자동계산</div>
             <div id="vShare" class="sum-value" style="color: #f1c40f;">0원</div>
         </div>
     </div>
 
-    <!-- 필터 영역 -->
     <div class="filter-bar">
         <span>📅 조회 기간:</span>
         <select id="filterYear" onchange="applyFilter()"></select>
@@ -91,19 +89,17 @@
 
 <script>
     const API_URL = "https://script.google.com/macros/s/AKfycbxoy3X2D_0OXAN-_2VHgFY9QQAQDMNNaBKPXw6MD7skeiQDXfJYEQlAsT9T2CTVqSfesg/exec";
-    let cachedData = []; // 불러온 전체 데이터를 저장
+    let cachedData = []; 
 
     function initFilter() {
         const yearSelect = document.getElementById('filterYear');
         const currYear = new Date().getFullYear();
-        // 현재 연도 기준 전후 1년씩 선택 가능
         for(let i = currYear - 1; i <= currYear + 1; i++) {
             const opt = document.createElement('option');
             opt.value = i; opt.innerText = i + "년";
             if(i === currYear) opt.selected = true;
             yearSelect.appendChild(opt);
         }
-        // 초기값은 이번 달로 설정
         document.getElementById('filterMonth').value = ("0" + (new Date().getMonth() + 1)).slice(-2);
     }
 
@@ -137,9 +133,13 @@
         filtered.sort((a,b) => new Date(fixDate(a.date)) - new Date(fixDate(b.date))).forEach(d => {
             const amt = parseInt(String(d.amount).replace(/,/g, '')) || 0;
             const isMyBiz = d.myBiz === true || d.myBiz === "true";
-            
-            totalSales += amt;
-            totalMyPay += isMyBiz ? (amt * 0.1) + (amt * 0.4) : (amt * 0.4);
+            const isExcluded = d.isExclude === true || d.isExclude === "true"; // 수당 제외 여부 확인
+
+            // 계산 로직: 제외 항목(isExcluded)이 아닐 때만 합계에 포함
+            if (!isExcluded) {
+                totalSales += amt;
+                totalMyPay += isMyBiz ? (amt * 0.1) + (amt * 0.4) : (amt * 0.4);
+            }
 
             const row = document.createElement('tr');
             row.innerHTML = `
