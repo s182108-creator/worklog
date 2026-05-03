@@ -4,29 +4,49 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>작업일지 뷰어</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         :root { --bg-body: #f8f9fa; --bg-card: #ffffff; --text-main: #2c3e50; --border: #dee2e6; --accent: #e74c3c; }
         @media (prefers-color-scheme: dark) { :root { --bg-body: #121212; --bg-card: #1e1e1e; --text-main: #e0e0e0; --border: #333333; } }
-        body { font-family: sans-serif; background: var(--bg-body); color: var(--text-main); margin: 0; padding: 15px; }
+        body { font-family: sans-serif; background: var(--bg-body); color: var(--text-main); margin: 0; padding: 0 15px 15px 15px; }
         .container { max-width: 1100px; margin: 0 auto; }
         
+        /* 고정 영역 래퍼 */
+        .sticky-header {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            background: var(--bg-body);
+            padding: 15px 0 10px 0;
+        }
+
+        /* 상단 요약 바 */
         .viewer-summary {
             background: #34495e; color: white; padding: 15px; border-radius: 12px;
             display: flex; justify-content: space-around; margin-bottom: 10px;
-            position: sticky; top: 10px; z-index: 100; box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
         }
         .sum-item { text-align: center; flex: 1; }
         .sum-label { font-size: 11px; opacity: 0.8; }
         .sum-value { font-size: 1.2em; font-weight: bold; margin-top: 4px; }
 
+        /* 필터 바 (상단 바와 함께 고정) */
         .filter-bar {
             display: flex; align-items: center; justify-content: center; gap: 10px;
             background: var(--bg-card); padding: 12px; border-radius: 10px;
-            margin-bottom: 15px; border: 1px solid var(--border);
+            border: 1px solid var(--border); flex-wrap: wrap;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
         }
         .filter-bar select { padding: 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-main); font-size: 14px; }
 
-        .table-wrapper { background: var(--bg-card); border-radius: 12px; overflow-x: auto; border: 1px solid var(--border); }
+        /* 버튼 스타일 */
+        .btn-v { padding: 8px 15px; cursor: pointer; border-radius: 6px; border: 1px solid #ccc; font-weight: bold; font-size: 13px; transition: 0.2s; }
+        .btn-refresh { background: #ffffff; color: #333; }
+        .btn-excel { background: #27ae60; color: white; border: none; }
+        .btn-v:hover { opacity: 0.8; }
+
+        /* 테이블 영역 */
+        .table-wrapper { background: var(--bg-card); border-radius: 12px; overflow-x: auto; border: 1px solid var(--border); margin-top: 5px; }
         table { width: 100%; border-collapse: collapse; min-width: 900px; }
         th { background: rgba(0,0,0,0.05); padding: 12px; font-size: 13px; border-bottom: 2px solid var(--border); text-align: left; }
         td { padding: 12px; font-size: 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
@@ -34,11 +54,9 @@
         .amt-text { color: #e67e22; font-weight: bold; }
         .my-biz-badge { background: var(--accent); color: white; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; }
         
-        .note-text { 
-            font-size: 12px; color: #7f8c8d; max-width: 200px; cursor: pointer; transition: all 0.2s ease; position: relative;
-        }
+        .note-text { font-size: 12px; color: #7f8c8d; max-width: 200px; cursor: pointer; }
         .note-truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .note-full { white-space: normal; overflow: visible; color: var(--text-main); background: rgba(231, 76, 60, 0.05); border-radius: 4px; }
+        .note-full { white-space: normal; overflow: visible; color: var(--text-main); background: rgba(0,0,0,0.03); border-radius: 4px; }
         
         #loader { text-align: center; padding: 50px; font-weight: bold; }
     </style>
@@ -46,39 +64,47 @@
 <body>
 
 <div class="container">
-    <div class="viewer-summary">
-        <div class="sum-item"><div class="sum-label">총 작업 매출 (제외항목 미포함)</div><div id="vTotal" class="sum-value">0원</div></div>
-        <div class="sum-item" style="border-left: 1px solid rgba(255,255,255,0.2);">
-            <div class="sum-label">월급 자동계산</div>
-            <div id="vShare" class="sum-value" style="color: #f1c40f;">0원</div>
+    <!-- 스크롤 시 따라오는 영역 시작 -->
+    <div class="sticky-header">
+        <div class="viewer-summary">
+            <div class="sum-item">
+                <div class="sum-label">총 작업 매출 (전체 합계)</div>
+                <div id="vTotal" class="sum-value">0원</div>
+            </div>
+            <div class="sum-item" style="border-left: 1px solid rgba(255,255,255,0.2);">
+                <div class="sum-label">월급 자동계산</div>
+                <div id="vShare" class="sum-value" style="color: #f1c40f;">0원</div>
+            </div>
+        </div>
+
+        <div class="filter-bar">
+            <span>📅 조회 기간:</span>
+            <select id="filterYear" onchange="applyFilter()"></select>
+            <select id="filterMonth" onchange="applyFilter()">
+                <option value="all">전체보기</option>
+                <option value="01">1월</option><option value="02">2월</option><option value="03">3월</option>
+                <option value="04">4월</option><option value="05">5월</option><option value="06">6월</option>
+                <option value="07">7월</option><option value="08">8월</option><option value="09">9월</option>
+                <option value="10">10월</option><option value="11">11월</option><option value="12">12월</option>
+            </select>
+            <button onclick="loadForViewer()" class="btn-v btn-refresh">🔄 새로고침</button>
+            <button onclick="exportExcel()" class="btn-v btn-excel">📊 엑셀 저장</button>
         </div>
     </div>
-
-    <div class="filter-bar">
-        <span>📅 조회 기간:</span>
-        <select id="filterYear" onchange="applyFilter()"></select>
-        <select id="filterMonth" onchange="applyFilter()">
-            <option value="all">전체보기</option>
-            <option value="01">1월</option><option value="02">2월</option><option value="03">3월</option>
-            <option value="04">4월</option><option value="05">5월</option><option value="06">6월</option>
-            <option value="07">7월</option><option value="08">8월</option><option value="09">9월</option>
-            <option value="10">10월</option><option value="11">11월</option><option value="12">12월</option>
-        </select>
-        <button onclick="loadForViewer()" style="margin-left:10px; padding:7px 12px; cursor:pointer; border-radius:5px; border:1px solid #ccc;">🔄 새로고침</button>
-    </div>
+    <!-- 스크롤 시 따라오는 영역 끝 -->
 
     <div class="table-wrapper">
         <table id="logTable">
             <thead>
                 <tr>
                     <th>날짜</th>
-                    <th>개인 오더</th>
+                    <th>오더</th>
                     <th>업체명</th>
                     <th>금액</th>
                     <th>작업자</th>
                     <th>장소</th>
                     <th>유형</th>
-                    <th>비고 (클릭 시 전체보기)</th>
+                    <th>비고</th>
                 </tr>
             </thead>
             <tbody id="viewerList"></tbody>
@@ -121,8 +147,8 @@
         const list = document.getElementById('viewerList');
         list.innerHTML = '';
 
-        let totalSales = 0;
-        let totalMyPay = 0;
+        let totalSales = 0;   
+        let totalMyPay = 0;   
 
         const filtered = cachedData.filter(d => {
             const dStr = fixDate(d.date);
@@ -133,12 +159,12 @@
         filtered.sort((a,b) => new Date(fixDate(a.date)) - new Date(fixDate(b.date))).forEach(d => {
             const amt = parseInt(String(d.amount).replace(/,/g, '')) || 0;
             const isMyBiz = d.myBiz === true || d.myBiz === "true";
-            const isExcluded = d.isExclude === true || d.isExclude === "true"; // 수당 제외 여부 확인
+            const isExcluded = d.isExclude === true || d.isExclude === "true";
 
-            // 계산 로직: 제외 항목(isExcluded)이 아닐 때만 합계에 포함
+            totalSales += amt;
+
             if (!isExcluded) {
-                totalSales += amt;
-                totalMyPay += isMyBiz ? (amt * 0.1) + (amt * 0.4) : (amt * 0.4);
+                totalMyPay += isMyBiz ? (amt * 0.5) : (amt * 0.4);
             }
 
             const row = document.createElement('tr');
@@ -163,6 +189,39 @@
         if (filtered.length === 0) {
             list.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:30px;">해당 기간의 데이터가 없습니다.</td></tr>';
         }
+    }
+
+    function exportExcel() {
+        const targetYear = document.getElementById('filterYear').value;
+        const targetMonth = document.getElementById('filterMonth').value;
+        const rows = [["날짜", "오더 구분", "업체명", "금액", "작업자", "장소", "유형", "비고"]];
+
+        const filtered = cachedData.filter(d => {
+            const dStr = fixDate(d.date);
+            if (targetMonth === 'all') return dStr.startsWith(targetYear);
+            return dStr.startsWith(`${targetYear}-${targetMonth}`);
+        }).sort((a,b) => new Date(fixDate(a.date)) - new Date(fixDate(b.date)));
+
+        if (filtered.length === 0) { alert("저장할 데이터가 없습니다."); return; }
+
+        filtered.forEach(d => {
+            const isMyBiz = d.myBiz === true || d.myBiz === "true";
+            rows.push([
+                fixDate(d.date),
+                isMyBiz ? "송하늘 오더" : "일반",
+                d.company || "",
+                d.amount,
+                d.worker || "",
+                d.location || "",
+                d.type || "",
+                d.note || ""
+            ]);
+        });
+
+        const worksheet = XLSX.utils.aoa_to_sheet(rows);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "작업일지");
+        XLSX.writeFile(workbook, `작업일지_${targetYear}_${targetMonth}.xlsx`);
     }
 
     async function loadForViewer() {
