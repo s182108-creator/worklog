@@ -64,7 +64,6 @@
 <body>
 
 <div class="container">
-    <!-- 스크롤 시 따라오는 영역 시작 -->
     <div class="sticky-header">
         <div class="viewer-summary">
             <div class="sum-item">
@@ -91,8 +90,6 @@
             <button onclick="exportExcel()" class="btn-v btn-excel">📊 엑셀 저장</button>
         </div>
     </div>
-    <!-- 스크롤 시 따라오는 영역 끝 -->
-
     <div class="table-wrapper">
         <table id="logTable">
             <thead>
@@ -161,10 +158,14 @@
             const isMyBiz = d.myBiz === true || d.myBiz === "true";
             const isExcluded = d.isExclude === true || d.isExclude === "true";
 
-            totalSales += amt;
-
+            // 요청하신 로직 반영: 내 거래처(isMyBiz)일 때 총 금액에서 제외, 수당은 10%만 반영
             if (!isExcluded) {
-                totalMyPay += isMyBiz ? (amt * 0.5) : (amt * 0.4);
+                if (isMyBiz) {
+                    totalMyPay += (amt * 0.1);
+                } else {
+                    totalSales += amt;
+                    totalMyPay += (amt * 0.4);
+                }
             }
 
             const row = document.createElement('tr');
